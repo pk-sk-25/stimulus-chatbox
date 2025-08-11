@@ -62,14 +62,15 @@
       line-height: 1.4;
       color: var(--text);
       word-wrap: break-word;
+      position: relative;
     }
-    .user {
-      background: #e0e7ff;
-      align-self: flex-end;
-    }
-    .bot {
-      background: #ede9fe;
-      align-self: flex-start;
+    .user { background: #e0e7ff; align-self: flex-end; }
+    .bot  { background: #ede9fe; align-self: flex-start; }
+    .timestamp {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 4px;
     }
     .typing {
       font-style: italic;
@@ -112,8 +113,6 @@
     }
     .quick-button:hover { background: #4338ca; }
     a { color: var(--accent); text-decoration: underline; }
-
-    /* Mobile comfort */
     @media (max-width: 420px) {
       .chat-container { height: 80vh; }
       .chat-header img { height: 56px; }
@@ -133,7 +132,16 @@
   </div>
 
   <script>
+    // ----- Config: optional delay to simulate AI "thinking"
+    const BOT_DELAY_MIN_MS = 1000;
+    const BOT_DELAY_MAX_MS = 1500;
+
     let expectingServicesDetail = false;
+
+    function nowTime() {
+      const d = new Date();
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
 
     function sendMessage(customText) {
       const inputField = document.getElementById("user-input");
@@ -145,7 +153,6 @@
       inputField.value = "";
       showTypingIndicator();
 
-      // Decide endpoint based on flow
       const endpoint = expectingServicesDetail ? "/services-detail" : "/get-response";
 
       fetch(endpoint, {
@@ -155,20 +162,24 @@
       })
         .then(r => r.json())
         .then(data => {
-          removeTypingIndicator();
-          addMessage(data.reply, "bot");
-          chatBox.scrollTop = chatBox.scrollHeight;
+          // Simulate delay before showing bot reply
+          const delay = BOT_DELAY_MIN_MS + Math.floor(Math.random() * (BOT_DELAY_MAX_MS - BOT_DELAY_MIN_MS));
+          setTimeout(() => {
+            removeTypingIndicator();
+            // Fallback is already handled by server; just display reply
+            addMessage(data.reply || "Sorry, I didn’t catch that. Try asking about registration, services, or contact.", "bot");
+            chatBox.scrollTop = chatBox.scrollHeight;
 
-          // If the top-level intent was "services", offer follow-up
-          if (!expectingServicesDetail && /services/i.test(userText)) {
-            expectingServicesDetail = true;
-            showFollowupChoices();
-          } else if (expectingServicesDetail) {
-            expectingServicesDetail = false;
-            showQuickReplies();
-          } else {
-            showQuickReplies();
-          }
+            if (!expectingServicesDetail && /services/i.test(userText)) {
+              expectingServicesDetail = true;
+              showFollowupChoices();
+            } else if (expectingServicesDetail) {
+              expectingServicesDetail = false;
+              showQuickReplies();
+            } else {
+              showQuickReplies();
+            }
+          }, delay);
         })
         .catch(() => {
           removeTypingIndicator();
@@ -180,8 +191,9 @@
       const chatBox = document.getElementById("chat-box");
       const messageDiv = document.createElement("div");
       messageDiv.classList.add("message", sender);
-      messageDiv.innerHTML = html;
+      messageDiv.innerHTML = `${html}<span class="timestamp">${nowTime()}</span>`;
       chatBox.appendChild(messageDiv);
+      chatBox.scrollTop = chatBox.scrollHeight;
     }
 
     function showTypingIndicator() {
@@ -209,6 +221,7 @@
         <button class="quick-button" onclick="sendMessage('Contact Info')">Contact</button>
       `;
       chatBox.appendChild(qr);
+      chatBox.scrollTop = chatBox.scrollHeight;
     }
 
     function showFollowupChoices() {
@@ -220,6 +233,7 @@
         <button class="quick-button" onclick="sendMessage('Recruitment')">Recruitment</button>
       `;
       chatBox.appendChild(qr);
+      chatBox.scrollTop = chatBox.scrollHeight;
     }
 
     // Enter to send
@@ -227,10 +241,8 @@
       if (e.key === "Enter") sendMessage();
     });
 
-    // Optional: load suggestions from /suggest and seed quick replies on first load
-    fetch("/suggest").then(r => r.json()).then(data => {
-      if (data?.suggestions?.length) showQuickReplies();
-    }).catch(() => {});
+    // Seed quick replies on load
+    showQuickReplies();
   </script>
 </body>
 </html>
