@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Stimulus Assistant</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: #f5f5f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    .chat-container {
+      width: 400px;
+      height: 600px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border: 1.5px solid #e4e4e7;
+    }
+
+    .chat-header {
+      background-color: white;
+      padding: 20px;
+      border-bottom: 1px solid #e4e4e7;
+      text-align: center;
+    }
+
+    .chat-header img {
+      height: 60px;
+    }
+
+    .chat-box {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      background: #fafafa;
+    }
+
+    .message {
+      max-width: 80%;
+      margin: 10px 0;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .user {
+      background: #e0e7ff;
+      color: #1e1e1e;
+      align-self: flex-end;
+    }
+
+    .bot {
+      background: #ede9fe;
+      color: #1e1e1e;
+      align-self: flex-start;
+    }
+
+    .typing {
+      font-style: italic;
+      color: #9ca3af;
+      padding: 5px 10px;
+    }
+
+    .input-area {
+      display: flex;
+      border-top: 1px solid #e4e4e7;
+    }
+
+    input {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      font-size: 14px;
+      outline: none;
+    }
+
+    button {
+      background: #7f5af0;
+      color: white;
+      border: none;
+      padding: 12px 18px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background: #6c4ed9;
+    }
+
+    .quick-replies {
+      margin-top: 10px;
+    }
+
+    .quick-button {
+      background: #4f46e5;
+      color: white;
+      padding: 6px 12px;
+      margin: 4px;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .quick-button:hover {
+      background: #4338ca;
+    }
+
+    a {
+      color: #4f46e5;
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="chat-container">
+    <div class="chat-header">
+      <img src="stimulus-logo.png" alt="Stimulus Logo" />
+    </div>
+    <div class="chat-box" id="chat-box"></div>
+    <div class="input-area">
+      <input type="text" id="user-input" placeholder="Ask a question..." />
+      <button onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+
+  <script>
+    let expectingServicesDetail = false;
+
+    function sendMessage(customText) {
+      const inputField = document.getElementById("user-input");
+      const chatBox = document.getElementById("chat-box");
+      const userText = customText || inputField.value.trim();
+      if (!userText) return;
+
+      addMessage(userText, "user");
+      inputField.value = "";
+      showTypingIndicator();
+
+      // Decide which endpoint to call
+      const endpoint = expectingServicesDetail ? "/services-detail" : "/get-response";
+
+      fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: userText })
+      })
+        .then(r => r.json())
+        .then(data => {
+          removeTypingIndicator();
+          addMessage(data.reply, "bot");
+          chatBox.scrollTop = chatBox.scrollHeight;
+
+          if (!expectingServicesDetail && /services/i.test(userText)) {
+            expectingServicesDetail = true;
+            showFollowupChoices();
+          } else if (expectingServicesDetail) {
+            expectingServicesDetail = false;
+            showQuickReplies();
+          } else {
+            showQuickReplies();
+          }
+        })
+        .catch(() => {
+          removeTypingIndicator();
+          addMessage("Error connecting to the server.", "bot");
+        });
+    }
+
+    function addMessage(text, sender) {
+      const chatBox = document.getElementById("chat-box");
+      const messageDiv = document.createElement("div");
+      messageDiv.classList.add("message", sender);
+      messageDiv.innerHTML = text;
+      chatBox.appendChild(messageDiv);
+    }
+
+    function showTypingIndicator() {
+      const chatBox = document.getElementById("chat-box");
+      const typingDiv = document.createElement("div");
+      typingDiv.id = "typing";
+      typingDiv.className = "typing";
+      typingDiv.textContent = "Bot is typing...";
+      chatBox.appendChild(typingDiv);
+    }
+
+    function removeTypingIndicator() {
+      const typing = document.getElementById("typing");
+      if (typing) typing.remove();
+    }
+
+    function showQuickReplies() {
+      const chatBox = document.getElementById("chat-box");
+      const qr = document.createElement("div");
+      qr.className = "quick-replies";
+      qr.innerHTML = `
+        <button class="quick-button" onclick="sendMessage('Register')">Register</button>
+        <button class="quick-button" onclick="sendMessage('Services')">Services</button>
+        <button class="quick-button" onclick="sendMessage('Contact Info')">Contact</button>
+      `;
+      chatBox.appendChild(qr);
+    }
+
+    function showFollowupChoices() {
+      const chatBox = document.getElementById("chat-box");
+      const qr = document.createElement("div");
+      qr.className = "quick-replies";
+      qr.innerHTML = `
+        <button class="quick-button" onclick="sendMessage('Consulting')">Consulting</button>
+        <button class="quick-button" onclick="sendMessage('Recruitment')">Recruitment</button>
+      `;
+      chatBox.appendChild(qr);
+    }
+
+    document.getElementById("user-input").addEventListener("keypress", function(e) {
+      if (e.key === "Enter") sendMessage();
+    });
+  </script>
+</body>
+</html>
