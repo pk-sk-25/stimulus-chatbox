@@ -3,157 +3,172 @@ const path = require("path");
 const cors = require("cors");
 const app = express();
 
-/* ------------------- Middleware ------------------- */
+/* ---------------- Config: edit these URLs if needed ---------------- */
+const LINKS = {
+  home:        "https://stimulus.org.in/",
+  services:    "https://stimulus.org.in/services",
+  consulting:  "https://stimulus.org.in/services#consulting",   // <- change if your site uses a different anchor/path
+  recruitment: "https://stimulus.org.in/services#recruitment",  // <- (e.g., '/services/recruitment' or '?tab=recruitment')
+  register:    "https://stimulus.org.in/register",
+  contact:     "https://stimulus.org.in/contact",
+  about:       "https://stimulus.org.in/about",
+  email:       "founder@stimulus.org.in",
+};
+
+/* ---------------- Middleware / static ---------------- */
 app.use(cors());
 app.use(express.json());
-app.use((req, _res, next) => {
-  console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
-  next();
-});
-
-/* ------------- Serve frontend from /public --------- */
+app.use((req, _res, next) => { console.log(`${new Date().toISOString()} ${req.method} ${req.url}`); next(); });
 app.use(express.static(path.join(process.cwd(), "public")));
+app.get("/health", (_req,res)=>res.json({ok:true}));
+app.get("/version", (_req,res)=>res.json({version:"phase-3-final-1.1.0"}));
 
-/* ----------------- Health / Version ---------------- */
-app.get("/health", (_req, res) => res.json({ ok: true }));
-app.get("/version", (_req, res) => res.json({ version: "phase-3-final-1.0.0" }));
-
-/* -------------------- Helpers ---------------------- */
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+/* ---------------- Helpers ---------------- */
+const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
+const pick = (arr)=>arr[Math.floor(Math.random()*arr.length)];
+const clean = (s="")=>s.toLowerCase().replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
+const tokenize = (s)=>clean(s).split(" ").filter(Boolean);
+const scoreIntent = (tokens, intent) => {
+  let score = 0;
+  for (const kw of intent.keywords) if (tokens.includes(kw)) score += 2;        // exact
+  for (const syn of intent.synonyms || []) if (tokens.includes(syn)) score += 1; // loose
+  return score;
+};
 function summarizeUserMessage(msg) {
-  const cleaned = (msg || "").trim().replace(/\s+/g, " ");
-  return cleaned.length > 120 ? cleaned.slice(0, 117) + "..." : cleaned;
+  const t=(msg||"").trim().replace(/\s+/g," ");
+  return t.length>120 ? t.slice(0,117)+"..." : t;
 }
 
-/* ---------------- Simulated “KB” ------------------- */
-const KB = [
+/* ---------------- Intents (NLU-lite KB) ---------------- */
+const INTENTS = [
   {
-    intent: "register",
-    tags: ["register", "signup", "enroll", "join"],
+    id: "register",
+    keywords: ["register","signup","enroll","join"],
+    synonyms: ["sign","sign-up","apply"],
     replies: [
-      "You can register here: <a href='https://stimulus.org.in/register' target='_blank'>stimulus.org.in/register</a>.",
-      "To get started, visit <a href='https://stimulus.org.in/register' target='_blank'>stimulus.org.in/register</a> and submit the form.",
-      "Register anytime at <a href='https://stimulus.org.in/register' target='_blank'>stimulus.org.in/register</a> — we’ll reach out soon."
+      `You can register here: <a href="${LINKS.register}" target="_blank">${LINKS.register}</a>.`,
+      `To get started, visit <a href="${LINKS.register}" target="_blank">the registration page</a> and submit the form.`
     ]
   },
   {
-    intent: "services",
-    tags: ["services", "offer", "help", "support", "what do you do", "solutions"],
+    id: "services",
+    keywords: ["services","offer","offers","solutions","support","help"],
+    synonyms: ["service","do","provide","provide"],
     replies: [
-      "We offer Business Consulting, Recruitment, and Advisory. Details: <a href='https://stimulus.org.in/services' target='_blank'>Services</a>.",
-      "Our core services: Consulting, Recruitment, and Advisory — see <a href='https://stimulus.org.in/services' target='_blank'>services</a>.",
-      "We help with strategy, hiring, and advisory. Explore: <a href='https://stimulus.org.in/services' target='_blank'>services page</a>."
+      `We offer Business Consulting, Recruitment, and Advisory. Details: <a href="${LINKS.services}" target="_blank">Services</a>.`,
+      `Our core services: Consulting, Recruitment, and Advisory — see <a href="${LINKS.services}" target="_blank">Services</a>.`
     ],
-    followupPrompt: "Are you interested in Consulting or Recruitment?"
+    followup: "Are you interested in Consulting or Recruitment?"
   },
   {
-    intent: "contact",
-    tags: ["contact", "email", "reach", "support", "helpdesk"],
+    id: "consulting",
+    keywords: ["consulting","consult"],
+    synonyms: ["strategy","gtm","operations"],
     replies: [
-      "Reach us at <strong>founder@stimulus.org.in</strong> or via <a href='https://stimulus.org.in/contact' target='_blank'>Contact</a>.",
-      "You can write to <strong>founder@stimulus.org.in</strong> or use the <a href='https://stimulus.org.in/contact' target='_blank'>contact form</a>.",
-      "Contact options: email <strong>founder@stimulus.org.in</strong> or <a href='https://stimulus.org.in/contact' target='_blank'>Contact page</a>."
+      `Consulting covers strategy, GTM, and operations. Learn more: <a href="${LINKS.consulting}" target="_blank">Consulting</a>.`
     ]
   },
   {
-    intent: "about",
-    tags: ["about", "company", "what is", "who are you"],
+    id: "recruitment",
+    keywords: ["recruitment","recruiting","hire","hiring","talent"],
     replies: [
-      "Stimulus is a consulting firm (founded 2025) helping businesses grow smarter. More: <a href='https://stimulus.org.in/about' target='_blank'>About</a>.",
-      "We’re a consulting startup focused on growth, hiring, and advisory. Learn more: <a href='https://stimulus.org.in/about' target='_blank'>About</a>.",
-      "We specialize in consulting and recruitment. See <a href='https://stimulus.org.in/about' target='_blank'>About us</a>."
+      `Recruitment spans sourcing to selection. See details: <a href="${LINKS.recruitment}" target="_blank">Recruitment</a>.`
     ]
   },
   {
-    intent: "home",
-    tags: ["home", "homepage", "start"],
+    id: "contact",
+    keywords: ["contact","email","reach","support","helpdesk"],
     replies: [
-      "Explore the homepage: <a href='https://stimulus.org.in' target='_blank'>stimulus.org.in</a>.",
-      "Head to the homepage here: <a href='https://stimulus.org.in' target='_blank'>stimulus.org.in</a>.",
-      "Homepage: <a href='https://stimulus.org.in' target='_blank'>stimulus.org.in</a>."
+      `Reach us at <strong>${LINKS.email}</strong> or via <a href="${LINKS.contact}" target="_blank">Contact</a>.`
+    ]
+  },
+  {
+    id: "about",
+    keywords: ["about","company","who","what"],
+    replies: [
+      `Stimulus is a consulting firm (founded 2025) helping businesses grow smarter. More: <a href="${LINKS.about}" target="_blank">About</a>.`
+    ]
+  },
+  {
+    id: "home",
+    keywords: ["home","homepage","start"],
+    replies: [
+      `Explore the homepage: <a href="${LINKS.home}" target="_blank">${LINKS.home}</a>.`
     ]
   }
 ];
 
-function detectIntent(userInput) {
-  const input = (userInput || "").toLowerCase();
-  for (const entry of KB) {
-    if (entry.tags.some((t) => input.includes(t))) return entry;
-  }
-  return null;
-}
-
-/* --------------- Main reply endpoint --------------- */
-app.post("/get-response", async (req, res) => {
-  const userText = req.body.message || "";
-
+/* ---------------- Routing logic ---------------- */
+async function handleMessage(userText) {
   // Simulated thinking delay (900–1800ms)
   await sleep(900 + Math.min(900, userText.length * 8));
 
-  // Handle direct detail intents even without a prior "services" turn
+  const tokens = tokenize(userText);
+
+  // direct-detail shortcuts (works even without prior "services")
   if (/(consult(ing)?)/i.test(userText)) {
-    return res.json({
-      reply:
-        "Consulting covers strategy, GTM, and operations. Details: " +
-        "<a href='https://stimulus.org.in/services#consulting' target='_blank'>Consulting</a>",
-      followup: null,
-      intent: "services_consulting"
-    });
+    return { reply: INTENTS.find(i=>i.id==="consulting").replies[0], intent:"consulting" };
   }
   if (/recruit(ment|ing)|hire/i.test(userText)) {
-    return res.json({
-      reply:
-        "Recruitment spans sourcing to selection. See: " +
-        "<a href='https://stimulus.org.in/services#recruitment' target='_blank'>Recruitment</a>",
-      followup: null,
-      intent: "services_recruitment"
-    });
+    return { reply: INTENTS.find(i=>i.id==="recruitment").replies[0], intent:"recruitment" };
   }
 
-  // Normal KB lookup
-  const entry = detectIntent(userText);
-  if (entry) {
-    const reply = pick(entry.replies).replace("{user}", summarizeUserMessage(userText));
-    return res.json({
-      reply,
-      followup: entry.followupPrompt || null,
-      intent: entry.intent
-    });
+  // score all intents
+  let best = null, bestScore = 0, second = null, secondScore = 0;
+  for (const intent of INTENTS) {
+    const s = scoreIntent(tokens, intent);
+    if (s > bestScore) { second = best; secondScore = bestScore; best = intent; bestScore = s; }
+    else if (s > secondScore) { second = intent; secondScore = s; }
+  }
+
+  if (best && bestScore >= 2) {
+    const reply = pick(best.replies);
+    const followup = best.followup || null;
+
+    // If top two are close (tie-ish), clarify
+    if (second && Math.abs(bestScore - secondScore) <= 1 && best.id === "services") {
+      return {
+        reply: `${reply} ${best.followup || "Are you interested in Consulting or Recruitment?"}`,
+        intent: "services",
+        followup: best.followup || "Consulting or Recruitment?"
+      };
+    }
+
+    return { reply, intent: best.id, followup };
   }
 
   // Fallback
   const echoed = summarizeUserMessage(userText);
-  return res.json({
-    reply:
-      `I can help you navigate the site. You said: “${echoed}”. ` +
-      `Try asking about registration, services, or contact info.`,
-    followup: null,
-    intent: "fallback"
-  });
+  return {
+    reply: `I can help you navigate the site. You said: “${echoed}”. Try asking about registration, services, or contact info.`,
+    intent: "fallback",
+    followup: null
+  };
+}
+
+/* ---------------- API ---------------- */
+app.post("/get-response", async (req, res) => {
+  const userText = req.body.message || "";
+  const result = await handleMessage(userText);
+  res.json(result);
 });
 
-/* --------- Services follow-up branching API -------- */
 app.post("/services-detail", async (req, res) => {
   const msg = (req.body.message || "").toLowerCase();
   await sleep(800 + Math.floor(Math.random() * 600));
 
   if (/(consult(ing)?)/.test(msg)) {
     return res.json({
-      reply:
-        "Consulting: strategy, GTM, operations. Learn more: " +
-        "<a href='https://stimulus.org.in/services#consulting' target='_blank'>Consulting</a>",
+      reply: INTENTS.find(i=>i.id==="consulting").replies[0],
       followup: null,
-      intent: "services_consulting"
+      intent: "consulting"
     });
   }
   if (/recruit(ment|ing)|hire/.test(msg)) {
     return res.json({
-      reply:
-        "Recruitment: sourcing to selection. See details: " +
-        "<a href='https://stimulus.org.in/services#recruitment' target='_blank'>Recruitment</a>",
+      reply: INTENTS.find(i=>i.id==="recruitment").replies[0],
       followup: null,
-      intent: "services_recruitment"
+      intent: "recruitment"
     });
   }
   return res.json({
@@ -163,10 +178,5 @@ app.post("/services-detail", async (req, res) => {
   });
 });
 
-app.get("/suggest", (_req, res) => {
-  res.json({ suggestions: ["Register", "Services", "Contact", "About", "Home"] });
-});
-
-/* ---------------------- Start ---------------------- */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server on http://localhost:${PORT}`));
