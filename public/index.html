@@ -132,7 +132,7 @@
   </div>
 
   <script>
-    // ----- Config: optional delay to simulate AI "thinking"
+    // Front-end delay to show "typing" even if server is fast
     const BOT_DELAY_MIN_MS = 1000;
     const BOT_DELAY_MAX_MS = 1500;
 
@@ -153,6 +153,7 @@
       inputField.value = "";
       showTypingIndicator();
 
+      // Decide endpoint based on current flow
       const endpoint = expectingServicesDetail ? "/services-detail" : "/get-response";
 
       fetch(endpoint, {
@@ -162,20 +163,18 @@
       })
         .then(r => r.json())
         .then(data => {
-          // Simulate delay before showing bot reply
           const delay = BOT_DELAY_MIN_MS + Math.floor(Math.random() * (BOT_DELAY_MAX_MS - BOT_DELAY_MIN_MS));
           setTimeout(() => {
             removeTypingIndicator();
-            // Fallback is already handled by server; just display reply
             addMessage(data.reply || "Sorry, I didn’t catch that. Try asking about registration, services, or contact.", "bot");
             chatBox.scrollTop = chatBox.scrollHeight;
 
-            if (!expectingServicesDetail && /services/i.test(userText)) {
-              expectingServicesDetail = true;
-              showFollowupChoices();
-            } else if (expectingServicesDetail) {
-              expectingServicesDetail = false;
-              showQuickReplies();
+            // Use the SERVER's intent/followup to control the next step
+            const needsFollowup = data.intent === "services" || !!data.followup;
+            expectingServicesDetail = needsFollowup;
+
+            if (needsFollowup) {
+              showFollowupChoices(); // Consulting / Recruitment
             } else {
               showQuickReplies();
             }

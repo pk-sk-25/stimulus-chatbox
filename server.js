@@ -3,7 +3,7 @@ const path = require("path");
 const cors = require("cors");
 const app = express();
 
-// ---------- Middleware
+/* ------------------- Middleware ------------------- */
 app.use(cors());
 app.use(express.json());
 app.use((req, _res, next) => {
@@ -11,24 +11,22 @@ app.use((req, _res, next) => {
   next();
 });
 
-// ---------- Serve frontend from /public
+/* ------------- Serve frontend from /public --------- */
 app.use(express.static(path.join(process.cwd(), "public")));
 
-// ---------- Health + version
+/* ----------------- Health / Version ---------------- */
 app.get("/health", (_req, res) => res.json({ ok: true }));
-app.get("/version", (_req, res) => res.json({ version: "phase-3-plus-1.0.0" }));
+app.get("/version", (_req, res) => res.json({ version: "phase-3-final-1.0.0" }));
 
-// ---------- Helpers
+/* -------------------- Helpers ---------------------- */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-
-// Very light “extract” to reuse the user’s words in replies
 function summarizeUserMessage(msg) {
   const cleaned = (msg || "").trim().replace(/\s+/g, " ");
   return cleaned.length > 120 ? cleaned.slice(0, 117) + "..." : cleaned;
 }
 
-// ---------- Simulated “KB” (static content with variations)
+/* ---------------- Simulated “KB” ------------------- */
 const KB = [
   {
     intent: "register",
@@ -86,16 +84,35 @@ function detectIntent(userInput) {
   return null;
 }
 
-// ---------- Main reply endpoint (JSON responses + delay + dynamic bits)
+/* --------------- Main reply endpoint --------------- */
 app.post("/get-response", async (req, res) => {
   const userText = req.body.message || "";
+
+  // Simulated thinking delay (900–1800ms)
+  await sleep(900 + Math.min(900, userText.length * 8));
+
+  // Handle direct detail intents even without a prior "services" turn
+  if (/(consult(ing)?)/i.test(userText)) {
+    return res.json({
+      reply:
+        "Consulting covers strategy, GTM, and operations. Details: " +
+        "<a href='https://stimulus.org.in/services#consulting' target='_blank'>Consulting</a>",
+      followup: null,
+      intent: "services_consulting"
+    });
+  }
+  if (/recruit(ment|ing)|hire/i.test(userText)) {
+    return res.json({
+      reply:
+        "Recruitment spans sourcing to selection. See: " +
+        "<a href='https://stimulus.org.in/services#recruitment' target='_blank'>Recruitment</a>",
+      followup: null,
+      intent: "services_recruitment"
+    });
+  }
+
+  // Normal KB lookup
   const entry = detectIntent(userText);
-
-  // Artificial thinking delay (900–1800ms)
-  const baseDelay = 900;
-  const extra = Math.min(900, userText.length * 8);
-  await sleep(baseDelay + extra);
-
   if (entry) {
     const reply = pick(entry.replies).replace("{user}", summarizeUserMessage(userText));
     return res.json({
@@ -105,7 +122,7 @@ app.post("/get-response", async (req, res) => {
     });
   }
 
-  // Fallback: echo a tiny bit for dynamic feel
+  // Fallback
   const echoed = summarizeUserMessage(userText);
   return res.json({
     reply:
@@ -116,23 +133,25 @@ app.post("/get-response", async (req, res) => {
   });
 });
 
-// ---------- Services follow-up endpoint (multi-turn branching)
+/* --------- Services follow-up branching API -------- */
 app.post("/services-detail", async (req, res) => {
   const msg = (req.body.message || "").toLowerCase();
-
-  // Simulate processing
   await sleep(800 + Math.floor(Math.random() * 600));
 
   if (/(consult(ing)?)/.test(msg)) {
     return res.json({
-      reply: "Consulting covers strategy, GTM, and operations. Details: <a href='https://stimulus.org.in/services#consulting' target='_blank'>Consulting</a>",
+      reply:
+        "Consulting: strategy, GTM, operations. Learn more: " +
+        "<a href='https://stimulus.org.in/services#consulting' target='_blank'>Consulting</a>",
       followup: null,
       intent: "services_consulting"
     });
   }
   if (/recruit(ment|ing)|hire/.test(msg)) {
     return res.json({
-      reply: "Recruitment spans sourcing to selection. See: <a href='https://stimulus.org.in/services#recruitment' target='_blank'>Recruitment</a>",
+      reply:
+        "Recruitment: sourcing to selection. See details: " +
+        "<a href='https://stimulus.org.in/services#recruitment' target='_blank'>Recruitment</a>",
       followup: null,
       intent: "services_recruitment"
     });
@@ -144,13 +163,10 @@ app.post("/services-detail", async (req, res) => {
   });
 });
 
-// ---------- Suggestions endpoint (optional quick actions)
 app.get("/suggest", (_req, res) => {
-  res.json({
-    suggestions: ["Register", "Services", "Contact", "About", "Home"]
-  });
+  res.json({ suggestions: ["Register", "Services", "Contact", "About", "Home"] });
 });
 
-// ---------- Start
+/* ---------------------- Start ---------------------- */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server on http://localhost:${PORT}`));
